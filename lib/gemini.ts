@@ -8,7 +8,10 @@ export function getAI() {
 
 export function cleanJsonString(text: string): string {
   let clean = text.trim();
-  if (clean.startsWith("```json")) clean = clean.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-  else if (clean.startsWith("```")) clean = clean.replace(/^```\s*/, "").replace(/\s*```$/, "");
+  if (clean.startsWith("```json")) {
+    clean = clean.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+  } else if (clean.startsWith("```")) {
+    clean = clean.replace(/^```\s*/, "").replace(/\s*```$/, "");
+  }
   return clean;
 }
