@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* Tokens used by your classnames like bg-paper, text-ink, font-serif, etc. */
+@theme {
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-mono: "Space Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+
+  --color-paper: #f0f0ed;
+  --color-ink: #1a1a1a;
+}
+
+/* Utilities referenced in your App.tsx (shadow-hard, shadow-hard-sm) */
+@utility shadow-hard {
+  box-shadow: 4px 4px 0 0 #000;
+}
+@utility shadow-hard-sm {
+  box-shadow: 2px 2px 0 0 #000;
+}
+
+/* Basic page sanity */
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+}

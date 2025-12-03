@@ -1,68 +1,49 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>The Digital Closet</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              serif: ['"Playfair Display"', 'Georgia', 'serif'],
-              mono: ['"Space Mono"', 'monospace'],
-              sans: ['"Inter"', 'sans-serif'],
-            },
-            colors: {
-              paper: '#f0f0ed',
-              ink: '#1a1a1a',
-            },
-            boxShadow: {
-              'hard': '4px 4px 0 0 #000',
-              'hard-sm': '2px 2px 0 0 #000',
-            }
-          },
-        },
-      }
-    </script>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Global background + scrollbar (optional, matches your AI Studio preview vibe) -->
     <style>
       body {
         background-color: #e5e5e5;
-        background-image: 
-          linear-gradient(#d4d4d4 1px, transparent 1px),
+        background-image: linear-gradient(#d4d4d4 1px, transparent 1px),
           linear-gradient(90deg, #d4d4d4 1px, transparent 1px);
         background-size: 20px 20px;
       }
+
       /* Custom Scrollbar */
       ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #f1f1f1; 
+        background: #f1f1f1;
         border-left: 1px solid #000;
       }
       ::-webkit-scrollbar-thumb {
-        background: #000; 
+        background: #000;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #333; 
+        background: #333;
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
-  }
-}
-</script>
-</head>
+  </head>
+
   <body>
     <div id="root"></div>
+
+    <!-- Vite entry point -->
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>
