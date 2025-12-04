@@ -154,7 +154,7 @@ const App: React.FC = () => {
       setWardrobe(prev => [...newItems, ...prev]);
     } catch (error) {
       console.error(error);
-      alert("Processing failed: ${error?.message ?? String(error)}");
+      alert("Processing failed. Please try a smaller image.");
     } finally {
       setIsProcessing(false);
       setStatusMessage("");
