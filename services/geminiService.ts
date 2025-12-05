@@ -376,10 +376,10 @@ export const generateAvatar = async (settings: ModelSettings): Promise<string> =
       : `${hairSetting} hair`;
 
   if (settings.gender === 'Mannequin') {
-      prompt = "A high-quality, photorealistic full-body studio shot of a neutral styling mannequin against a pure white background. The mannequin should be featureless but humanoid with a matte finish. Soft studio lighting.";
+      prompt = "A high-quality, photorealistic full-body studio shot of a neutral styling mannequin against a pure white background. The mannequin should be featureless but a humanoid with a matte finish. Soft studio lighting.";
   } else {
       // More specific prompt for human models to ensure quality with flash-image
-      prompt = `A high-quality, photorealistic full-body studio shot of a ${settings.race} ${settings.gender} model with ${hairDescription}. The model is standing in a simple, neutral standing pose looking at the camera against a pure white background. The model is wearing simple, neutral, tight-fitting white undergarments (tank top and shorts). Lighting is soft studio lighting.`;
+      prompt = `A high-quality, photorealistic full-body, head-to-toes, studio shot of a ${settings.race} ${settings.gender} model with ${hairDescription}. The model is standing in a simple, neutral standing pose looking at the camera against a pure white background. The model is wearing simple, neutral, tight-fitting white undergarments (tank top and shorts). Lighting is soft studio lighting.`;
   }
 
   // Switch to gemini-2.5-flash-image for better reliability
