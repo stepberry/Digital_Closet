@@ -1,3 +1,4 @@
+
 export interface ClothingItem {
   id: string;
   name: string;
@@ -25,6 +26,12 @@ export interface ShoppingSuggestion {
   category: string;
   color: string;
   style: string;
+}
+
+export interface ModelSettings {
+  gender: 'Female' | 'Male' | 'Non-Binary' | 'Mannequin';
+  race: string;
+  hair: string;
 }
 
 export type AppMode = 'wardrobe' | 'outfit' | 'try-on';

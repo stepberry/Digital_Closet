@@ -1,6 +1,67 @@
-import { ClothingItem, WardrobeAnalysisResult, ShoppingSuggestion } from "../types";
 
-// ---------- Image helpers (browser-safe) ----------
+import { GoogleGenAI, Type } from "@google/genai";
+import { ClothingItem, WardrobeAnalysisResult, ShoppingSuggestion, ModelSettings } from "../types";
+
+// CONSTANTS
+// Google API keys always start with "AIza" and are 39 characters long.
+const API_KEY_REGEX = /^AIza[0-9A-Za-z\-_]{35}$/;
+const STORAGE_KEY = "user_provided_gemini_api_key";
+
+// Helper: Manage API Key
+// STRICT: Only use LocalStorage. Never process.env.
+let geminiApiKey: string = localStorage.getItem(STORAGE_KEY) || "";
+
+export const setGeminiApiKey = (key: string) => {
+  const cleanKey = key.trim();
+  geminiApiKey = cleanKey;
+  localStorage.setItem(STORAGE_KEY, cleanKey);
+};
+
+export const getGeminiApiKey = () => geminiApiKey;
+
+export const validateApiKey = async (key: string): Promise<boolean> => {
+  const cleanKey = key.trim();
+  
+  // 1. Strict Format Validation
+  // If it doesn't start with AIza or has wrong length, fail immediately.
+  if (!API_KEY_REGEX.test(cleanKey)) {
+      console.warn("Key validation failed: Incorrect format.");
+      return false; 
+  }
+
+  // 2. Server Connectivity Check
+  try {
+    // Explicitly use the provided key to test connectivity
+    const ai = new GoogleGenAI({ apiKey: cleanKey });
+    // Minimal valid request to test credentials against Google servers
+    await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: "ping",
+    });
+    return true;
+  } catch (error) {
+    console.error("Key validation failed: Server rejected key.", error);
+    // If Google returns 400/401/403, the key is invalid.
+    return false;
+  }
+};
+
+const getAI = () => {
+  if (!geminiApiKey) {
+    throw new Error("API Key not set. Please click 'SET API KEY' in the header to configure.");
+  }
+  
+  // Runtime Integrity Check
+  if (!API_KEY_REGEX.test(geminiApiKey)) {
+      throw new Error("The saved API Key is invalid (must start with 'AIza'). Please re-enter your key.");
+  }
+
+  // STRICT: Always use the dynamic key variable
+  return new GoogleGenAI({ apiKey: geminiApiKey });
+};
+
+// Helper: Resize and compress image
+// MODIFIED: Aggressive compression (Max 640px, 0.5 quality) to ensure LocalStorage stability
 export const resizeImage = (file: File | Blob): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -9,11 +70,11 @@ export const resizeImage = (file: File | Blob): Promise<string> => {
       const img = new Image();
       img.src = event.target?.result as string;
       img.onload = () => {
-        const canvas = document.createElement("canvas");
+        const canvas = document.createElement('canvas');
         let width = img.width;
         let height = img.height;
-        const maxDim = 640;
-
+        const maxDim = 640; // Reduced to 640px to prevent memory crashes
+        
         if (width > height) {
           if (width > maxDim) {
             height *= maxDim / width;
@@ -25,18 +86,19 @@ export const resizeImage = (file: File | Blob): Promise<string> => {
             height = maxDim;
           }
         }
-
+        
         canvas.width = width;
         canvas.height = height;
-        const ctx = canvas.getContext("2d");
+        const ctx = canvas.getContext('2d');
         if (!ctx) {
-          reject(new Error("Could not get canvas context"));
-          return;
+             reject(new Error("Could not get canvas context"));
+             return;
         }
-        ctx.fillStyle = "#FFFFFF";
+        ctx.fillStyle = "#FFFFFF"; // Ensure no transparent backgrounds which can increase size
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.5));
+        // Reduced quality to 0.5 for maximum storage efficiency
+        resolve(canvas.toDataURL('image/jpeg', 0.5)); 
       };
       img.onerror = (err) => reject(err);
     };
@@ -44,87 +106,303 @@ export const resizeImage = (file: File | Blob): Promise<string> => {
   });
 };
 
+// Helper: Compress an existing base64 string
 export const compressBase64 = async (base64Str: string): Promise<string> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.src = base64Str;
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const maxDim = 640;
-      let width = img.width;
-      let height = img.height;
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.src = base64Str;
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const maxDim = 640;
+            let width = img.width;
+            let height = img.height;
 
-      if (width > height) {
-        if (width > maxDim) {
-          height *= maxDim / width;
-          width = maxDim;
-        }
-      } else {
-        if (height > maxDim) {
-          width *= maxDim / height;
-          height = maxDim;
-        }
-      }
+            if (width > height) {
+                if (width > maxDim) { height *= maxDim / width; width = maxDim; }
+            } else {
+                if (height > maxDim) { width *= maxDim / height; height = maxDim; }
+            }
 
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.5));
-      } else {
-        resolve(base64Str);
-      }
-    };
-    img.onerror = () => resolve(base64Str);
-  });
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if(ctx) {
+                ctx.fillStyle = "#FFFFFF";
+                ctx.fillRect(0, 0, width, height);
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', 0.5));
+            } else {
+                resolve(base64Str);
+            }
+        };
+        img.onerror = () => resolve(base64Str);
+    });
 };
 
-// ---------- HTTP helper ----------
-async function postJSON<T>(url: string, body: any): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `Request failed: ${res.status}`);
+// Helper: Clean JSON string
+const cleanJsonString = (text: string): string => {
+  let clean = text.trim();
+  if (clean.startsWith('```json')) {
+    clean = clean.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+  } else if (clean.startsWith('```')) {
+    clean = clean.replace(/^```\s*/, '').replace(/\s*```$/, '');
   }
-
-  return (await res.json()) as T;
-}
-
-// ---------- Gemini calls (server-side via /api) ----------
-export const analyzeWardrobeImage = (base64Image: string): Promise<WardrobeAnalysisResult> => {
-  return postJSON<WardrobeAnalysisResult>("/api/analyze-wardrobe", { base64Image });
+  return clean;
 };
 
+/**
+ * Analyzes an image to detect clothing items.
+ */
+export const analyzeWardrobeImage = async (base64Image: string): Promise<WardrobeAnalysisResult> => {
+  const ai = getAI();
+  const cleanBase64 = base64Image.split(',')[1];
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: {
+      parts: [
+        { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } },
+        { text: "Analyze this image. Identify every distinct article of clothing. For each item, provide a name, category (Top, Bottom, Shoes, Outerwear, Accessory, Dress), the most prominent color as a Hex Code, a color name, the pattern (if any, else 'Solid'), the style description, and the vibe." }
+      ]
+    },
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          items: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                category: { type: Type.STRING },
+                color: { type: Type.STRING, description: "Hex code e.g. #FF0000" },
+                colorName: { type: Type.STRING },
+                pattern: { type: Type.STRING },
+                style: { type: Type.STRING },
+                vibe: { type: Type.STRING },
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  const text = response.text;
+  if (!text) throw new Error("No data returned from AI");
+  
+  try {
+    const cleanedText = cleanJsonString(text);
+    return JSON.parse(cleanedText) as WardrobeAnalysisResult;
+  } catch (e) {
+    throw new Error("AI returned invalid data format.");
+  }
+};
+
+/**
+ * Generates an isolated "Product Shot".
+ */
 export const isolateClothingItem = async (originalBase64: string, itemName: string): Promise<string> => {
-  const { image } = await postJSON<{ image: string }>("/api/isolate-item", { originalBase64, itemName });
-  return await compressBase64(image);
+  const ai = getAI();
+  const cleanBase64 = originalBase64.split(',')[1];
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash-image",
+    contents: {
+      parts: [
+        { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } },
+        { text: `Generate a photorealistic, studio-quality product image of just the ${itemName} from this photo. The background must be pure white (#FFFFFF). The lighting should be soft and even. Preserve the texture and color exactly.` }
+      ]
+    }
+  });
+
+  for (const part of response.candidates?.[0]?.content?.parts || []) {
+    if (part.inlineData) {
+      const rawBase64 = `data:image/png;base64,${part.inlineData.data}`;
+      // Compress isolated items to save storage
+      return await compressBase64(rawBase64);
+    }
+  }
+  return originalBase64;
 };
 
+/**
+ * Generates a virtual try-on image.
+ */
 export const generateVirtualTryOn = async (
   modelBase64: string,
   clothingItems: ClothingItem[],
   vibe: string
 ): Promise<string> => {
-  const { image } = await postJSON<{ image: string }>("/api/try-on", { modelBase64, clothingItems, vibe });
-  return image;
+  const ai = getAI();
+  const cleanModelBase64 = modelBase64.split(',')[1];
+
+  const itemDescriptions = clothingItems.map(c => `${c.colorName} ${c.name} (${c.style})`).join(", ");
+  
+  // UPDATED PROMPT: STRICT "Keep Original" Logic
+  const prompt = `
+    Image Editing Task: Virtual Try-On.
+    
+    Target Items to Wear: ${itemDescriptions}.
+    Style Context: ${vibe}.
+
+    INSTRUCTIONS:
+    1. MODIFY ONLY the specific body parts required to wear the Target Items.
+    2. PRESERVE EVERYTHING ELSE: The person's face, body, pose, background, and any existing clothing items that do not conflict with the Target Items MUST remain unchanged.
+       - Example: If Target Items only includes a shirt, do NOT change the person's existing pants or shoes.
+       - Example: If Target Items only includes shoes, do NOT change the person's shirt or pants.
+    3. REALISM: The new items should blend photorealistically with the original image (lighting, shadows, fabric texture).
+    4. Do not auto-complete the outfit. If the user only selected one item, show only that item on the person.
+  `;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash-image",
+    contents: {
+      parts: [
+        { inlineData: { mimeType: "image/jpeg", data: cleanModelBase64 } },
+        { text: prompt }
+      ]
+    }
+  });
+
+   for (const part of response.candidates?.[0]?.content?.parts || []) {
+    if (part.inlineData) {
+       // Do NOT compress try-on results. Return high-quality base64 for zooming.
+       return `data:image/png;base64,${part.inlineData.data}`;
+    }
+  }
+  throw new Error("Failed to generate try-on image");
 };
 
-export const suggestOutfit = (
-  wardrobe: ClothingItem[],
-  prompt: string
-): Promise<{ itemIds: string[]; vibe: string; reasoning: string }> => {
-  return postJSON<{ itemIds: string[]; vibe: string; reasoning: string }>("/api/suggest-outfit", { wardrobe, prompt });
-};
+/**
+ * Suggests an outfit based on a prompt.
+ */
+export const suggestOutfit = async (wardrobe: ClothingItem[], prompt: string): Promise<{ itemIds: string[], vibe: string, reasoning: string }> => {
+  const ai = getAI();
+  const wardrobeSummary = wardrobe.map(item => ({
+    id: item.id,
+    name: item.name,
+    category: item.category,
+    color: item.colorName,
+    style: item.style
+  }));
 
+  const response = await ai.models.generateContent({
+    model: "gemini-3-pro-preview",
+    contents: `You are a digital stylist.
+    User Request: "${prompt}"
+    Wardrobe: ${JSON.stringify(wardrobeSummary)}
+    
+    Select the best outfit. You can mix and match.
+    Return JSON with 'itemIds', 'vibe', and 'reasoning'.`,
+    config: {
+      responseMimeType: "application/json",
+       responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          itemIds: { type: Type.ARRAY, items: { type: Type.STRING } },
+          vibe: { type: Type.STRING },
+          reasoning: { type: Type.STRING }
+        }
+      }
+    }
+  });
+
+  const text = response.text;
+  if(!text) throw new Error("No suggestion generated");
+  return JSON.parse(cleanJsonString(text));
+}
+
+/**
+ * Suggests shopping additions.
+ */
 export const suggestShoppingAdditions = async (wardrobe: ClothingItem[]): Promise<ShoppingSuggestion[]> => {
-  const data = await postJSON<{ suggestions: ShoppingSuggestion[] }>("/api/shopping-suggestions", { wardrobe });
-  return data.suggestions ?? [];
+    const ai = getAI();
+    const wardrobeSummary = wardrobe.map(item => `${item.colorName} ${item.name} (${item.category})`).join(", ");
+
+    const response = await ai.models.generateContent({
+        model: "gemini-3-pro-preview",
+        contents: `Analyze this wardrobe: ${wardrobeSummary}.
+        Identify 3 key missing items that would maximize outfit combinations.
+        Return JSON.`,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    suggestions: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                itemName: { type: Type.STRING },
+                                category: { type: Type.STRING },
+                                color: { type: Type.STRING },
+                                style: { type: Type.STRING },
+                                reason: { type: Type.STRING }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    const text = response.text;
+    if(!text) return [];
+    try {
+        const data = JSON.parse(cleanJsonString(text));
+        return data.suggestions || [];
+    } catch {
+        return [];
+    }
+};
+
+/**
+ * Generates a base avatar model.
+ */
+export const generateAvatar = async (settings: ModelSettings): Promise<string> => {
+  const ai = getAI();
+  let prompt = "";
+  
+  // Clean hair setting
+  const hairSetting = settings.hair.trim();
+  const isBald = hairSetting.toLowerCase() === 'bald';
+
+  const hairDescription = isBald
+      ? 'bald head, no hair' 
+      : `${hairSetting} hair`;
+
+  if (settings.gender === 'Mannequin') {
+      prompt = "A high-quality, photorealistic full-body studio shot of a neutral styling mannequin against a pure white background. The mannequin should be featureless but humanoid with a matte finish. Soft studio lighting.";
+  } else {
+      // More specific prompt for human models to ensure quality with flash-image
+      prompt = `A high-quality, photorealistic full-body studio shot of a ${settings.race} ${settings.gender} model with ${hairDescription}. The model is standing in a simple, neutral standing pose looking at the camera against a pure white background. The model is wearing simple, neutral, tight-fitting white undergarments (tank top and shorts). Lighting is soft studio lighting.`;
+  }
+
+  // Switch to gemini-2.5-flash-image for better reliability
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash-image",
+    contents: {
+      parts: [
+        { text: prompt }
+      ]
+    },
+    config: {
+        imageConfig: {
+          aspectRatio: "3:4"
+        }
+    }
+  });
+
+  for (const part of response.candidates?.[0]?.content?.parts || []) {
+    if (part.inlineData) {
+      const rawBase64 = `data:image/png;base64,${part.inlineData.data}`;
+      // Compress to save storage but keep reasonable quality for a base model
+      return await compressBase64(rawBase64);
+    }
+  }
+  throw new Error("Failed to generate avatar");
 };

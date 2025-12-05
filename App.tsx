@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { analyzeWardrobeImage, isolateClothingItem, suggestOutfit, generateVirtualTryOn, resizeImage, suggestShoppingAdditions } from './services/geminiService';
+import { analyzeWardrobeImage, isolateClothingItem, suggestOutfit, generateVirtualTryOn, resizeImage, suggestShoppingAdditions, setGeminiApiKey, getGeminiApiKey, generateAvatar } from './services/geminiService';
 import WardrobeGallery from './components/WardrobeGallery';
 import ModelViewer from './components/ModelViewer';
 import ShoppingSuggestions from './components/ShoppingSuggestions';
-import { ClothingItem, ShoppingSuggestion } from './types';
+import ApiKeyModal from "./components/ApiKeyModal";
+import DataManagementModal from "./components/DataManagementModal";
+import MusicPlayer from "./components/MusicPlayer";
+import { ClothingItem, ShoppingSuggestion, ModelSettings } from './types';
 
 const App: React.FC = () => {
   // State
@@ -21,11 +24,17 @@ const App: React.FC = () => {
   const [prompt, setPrompt] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
-  const [isListening, setIsListening] = useState(false);
   
   // Suggestion State
   const [suggestions, setSuggestions] = useState<ShoppingSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // API Key State
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+
+  // Data Management State
+  const [showDataModal, setShowDataModal] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Refs
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -55,6 +64,11 @@ const App: React.FC = () => {
       console.error("Failed to load data", e);
       setWardrobe([]); 
     }
+
+    // Check for API Key
+    if (!getGeminiApiKey()) {
+      setShowApiKeyModal(true);
+    }
   }, []);
 
   // Save Data
@@ -70,46 +84,25 @@ const App: React.FC = () => {
     }
   }, [wardrobe, modelImage]);
 
-  // --- Voice Input Logic ---
-  const handleVoiceInput = () => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        alert("Voice recognition is not supported in this browser.");
-        return;
-    }
-
-    // @ts-ignore
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    
-    recognition.continuous = false;
-    recognition.lang = 'en-US';
-    recognition.interimResults = false;
-
-    recognition.onstart = () => {
-        setIsListening(true);
-    };
-
-    recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setPrompt(prev => prev ? `${prev} ${transcript}` : transcript);
-        setIsListening(false);
-    };
-
-    recognition.onerror = (event: any) => {
-        console.error("Speech error", event.error);
-        setIsListening(false);
-    };
-
-    recognition.onend = () => {
-        setIsListening(false);
-    };
-
-    recognition.start();
-  };
-
   // --- Handlers ---
 
+  const handleSaveApiKey = (key: string) => {
+    setGeminiApiKey(key);
+    setShowApiKeyModal(false);
+  };
+
+  const handleImportData = (data: { wardrobe: ClothingItem[], modelImage: string | null }) => {
+      setWardrobe(data.wardrobe);
+      setModelImage(data.modelImage);
+      // Reset generated states
+      setGeneratedOutfitImage(undefined);
+      setSelectedItemIds([]);
+      setCurrentlyWornIds([]);
+      alert("Closet data restored successfully.");
+  };
+
   const handleAddItem = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!getGeminiApiKey()) { setShowApiKeyModal(true); return; }
     if (!e.target.files?.length) return;
     setIsProcessing(true);
     setStatusMessage("SCANNING_ASSETS...");
@@ -152,9 +145,9 @@ const App: React.FC = () => {
         });
       }
       setWardrobe(prev => [...newItems, ...prev]);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("Processing failed. Please try a smaller image.");
+      alert(`Processing failed: ${error.message}`);
     } finally {
       setIsProcessing(false);
       setStatusMessage("");
@@ -177,6 +170,7 @@ const App: React.FC = () => {
   };
 
   const handleRenderLook = async () => {
+    if (!getGeminiApiKey()) { setShowApiKeyModal(true); return; }
     if (!modelImage || selectedItemIds.length === 0) return;
     setIsProcessing(true);
     setStatusMessage("RENDERING_VIRTUAL_FIT...");
@@ -188,9 +182,9 @@ const App: React.FC = () => {
         const tryOnImage = await generateVirtualTryOn(modelImage, items, vibe);
         setGeneratedOutfitImage(tryOnImage);
         setCurrentlyWornIds(selectedItemIds);
-    } catch (e) {
+    } catch (e: any) {
         console.error(e);
-        alert("Render failed.");
+        alert(`Render failed: ${e.message}`);
     } finally {
         setIsProcessing(false);
         setStatusMessage("");
@@ -198,6 +192,7 @@ const App: React.FC = () => {
   };
 
   const handleAIStylist = async () => {
+    if (!getGeminiApiKey()) { setShowApiKeyModal(true); return; }
     if (!prompt.trim()) return;
     setIsProcessing(true);
     setStatusMessage("COMPUTING_OUTFIT_DATA...");
@@ -215,8 +210,8 @@ const App: React.FC = () => {
             setCurrentlyWornIds(suggestion.itemIds);
         }
       }
-    } catch (error) {
-      alert("Styling failed.");
+    } catch (error: any) {
+      alert(`Styling failed: ${error.message}`);
     } finally {
       setIsProcessing(false);
       setStatusMessage("");
@@ -224,6 +219,7 @@ const App: React.FC = () => {
   };
 
   const handleGetShoppingSuggestions = async () => {
+      if (!getGeminiApiKey()) { setShowApiKeyModal(true); return; }
       setIsProcessing(true);
       setStatusMessage("ANALYZING_WARDROBE_GAPS...");
       try {
@@ -232,6 +228,23 @@ const App: React.FC = () => {
           setShowSuggestions(true);
       } catch (e) {
           alert("Could not get suggestions.");
+      } finally {
+          setIsProcessing(false);
+          setStatusMessage("");
+      }
+  };
+
+  const handleGenerateModel = async (settings: ModelSettings) => {
+      if (!getGeminiApiKey()) { setShowApiKeyModal(true); return; }
+      setIsProcessing(true);
+      setStatusMessage("GENERATING_AVATAR...");
+      try {
+          const newAvatar = await generateAvatar(settings);
+          setModelImage(newAvatar);
+          setGeneratedOutfitImage(undefined);
+          setCurrentlyWornIds([]);
+      } catch (e: any) {
+          alert("Avatar generation failed: " + e.message);
       } finally {
           setIsProcessing(false);
           setStatusMessage("");
@@ -258,21 +271,39 @@ const App: React.FC = () => {
     <div className="min-h-screen flex flex-col font-sans text-ink bg-stone-200">
       
       {/* --- HEADER --- */}
-      <header className="bg-white border-b-2 border-black px-6 py-4 flex justify-between items-center sticky top-0 z-40 shadow-hard-sm">
-        <div className="flex items-center gap-4">
-           <div className="w-8 h-8 bg-black text-white flex items-center justify-center font-serif font-bold text-xl">D</div>
-           <div>
-             <h1 className="font-serif text-2xl font-bold tracking-tight leading-none">THE DIGITAL CLOSET</h1>
-             <p className="font-mono text-[10px] tracking-widest text-stone-500">EST. 2025 // CURATE_ORGANIZE</p>
+      <header className="bg-white border-b-2 border-black px-4 sm:px-6 py-4 flex justify-between items-center sticky top-0 z-40 shadow-hard-sm">
+        <div className="flex items-center gap-4 overflow-hidden">
+           <div className="w-8 h-8 bg-black text-white flex items-center justify-center font-serif font-bold text-xl shrink-0">D</div>
+           <div className="overflow-hidden">
+             <h1 className="font-serif text-lg sm:text-2xl font-bold tracking-tight leading-none truncate">THE DIGITAL CLOSET</h1>
+             <p className="font-mono text-[10px] tracking-widest text-stone-500 hidden sm:block">EST. 2025 // CURATE_ORGANIZE</p>
            </div>
         </div>
         
-        <div className="flex gap-4">
-          <button onClick={handleGetShoppingSuggestions} className="hidden sm:flex items-center gap-2 font-mono text-xs hover:underline">
-             <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
-             AI_SHOPPING_ASSISTANT
-          </button>
+        <div className="flex gap-2 sm:gap-4 items-center shrink-0">
+          {/* Desktop: Full buttons */}
+          <div className="hidden sm:flex gap-4 items-center">
+            <button 
+              onClick={() => setShowApiKeyModal(true)}
+              className={`font-mono text-[10px] uppercase border border-black px-2 py-1 hover:bg-black hover:text-white transition-colors ${!getGeminiApiKey() ? 'bg-red-500 text-white animate-pulse border-red-500' : ''}`}
+            >
+              {getGeminiApiKey() ? 'API_KEY_SET' : '! SET_API_KEY'}
+            </button>
 
+            <button 
+              onClick={() => setShowDataModal(true)}
+              className="font-mono text-[10px] uppercase border border-black px-2 py-1 hover:bg-black hover:text-white transition-colors"
+            >
+              [ SAVE / LOAD ]
+            </button>
+
+            <button onClick={handleGetShoppingSuggestions} className="flex items-center gap-2 font-mono text-xs hover:underline">
+              <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+              AI_SHOPPING_ASSISTANT
+            </button>
+          </div>
+
+          {/* Always Visible */}
           <div className="relative">
              <button 
                onClick={() => setShowAddModal(!showAddModal)}
@@ -294,11 +325,47 @@ const App: React.FC = () => {
                </div>
              )}
           </div>
+          
+          <MusicPlayer />
+
+          {/* Mobile: Kebab Menu */}
+          <div className="relative sm:hidden">
+            <button 
+              onClick={() => setIsMobileMenuOpen(prev => !prev)}
+              className="w-10 h-10 flex items-center justify-center bg-white border border-black hover:bg-black hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01" /></svg>
+            </button>
+
+            {isMobileMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 w-56 bg-white border-2 border-black shadow-hard z-50 p-2">
+                <button
+                    onClick={() => { setShowApiKeyModal(true); setIsMobileMenuOpen(false); }}
+                    className={`w-full text-left p-3 hover:bg-stone-100 font-mono text-xs border-b border-stone-200 ${!getGeminiApiKey() ? 'text-red-500 font-bold' : ''}`}
+                >
+                  {getGeminiApiKey() ? 'API Key Set' : '! Set API Key'}
+                </button>
+                <button
+                    onClick={() => { setShowDataModal(true); setIsMobileMenuOpen(false); }}
+                    className="w-full text-left p-3 hover:bg-stone-100 font-mono text-xs border-b border-stone-200"
+                >
+                  Save / Load Closet
+                </button>
+                <button 
+                    onClick={() => { handleGetShoppingSuggestions(); setIsMobileMenuOpen(false); }} 
+                    className="w-full text-left p-3 hover:bg-stone-100 font-mono text-xs flex items-center gap-2"
+                >
+                  <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                  AI Shopping Assistant
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
       {/* --- MAIN LAYOUT --- */}
-      <main className="flex-grow flex flex-col lg:flex-row overflow-hidden h-[calc(100vh-85px)]">
+      <main className="flex-grow flex flex-col lg:flex-row lg:overflow-hidden lg:h-[calc(100vh-85px)]">
         
         {/* LEFT PANEL: Controls & Wardrobe */}
         <div className="w-full lg:w-[450px] flex flex-col bg-white border-r-2 border-black z-30 shadow-xl">
@@ -317,16 +384,6 @@ const App: React.FC = () => {
                     className="w-full p-4 pr-12 bg-white border-2 border-black font-mono text-xs focus:outline-none focus:shadow-hard transition-shadow resize-none h-24"
                 />
                 
-                {/* Voice Input Button */}
-                <button 
-                  onClick={handleVoiceInput}
-                  className={`absolute top-2 right-2 flex items-center gap-1 px-2 py-1 border border-black transition-all ${isListening ? 'bg-red-600 text-white animate-pulse border-red-800' : 'bg-stone-100 text-black hover:bg-black hover:text-white'}`}
-                  title="Speak Prompt"
-                >
-                    <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-white' : 'bg-red-500'}`}></div>
-                    <span className="font-mono text-[10px] font-bold">REC</span>
-                </button>
-
                 <button 
                     onClick={handleAIStylist}
                     disabled={isProcessing || !prompt}
@@ -354,12 +411,13 @@ const App: React.FC = () => {
         </div>
 
         {/* RIGHT PANEL: Model Viewport */}
-        <div className="flex-grow bg-stone-200 p-4 lg:p-8 flex flex-col overflow-hidden relative">
+        <div className="flex-grow bg-stone-200 p-4 lg:p-8 flex flex-col overflow-hidden relative h-screen lg:h-auto">
           <ModelViewer 
             modelImage={modelImage}
             generatedOutfitImage={generatedOutfitImage}
             isProcessing={isProcessing}
             onUploadModel={handleModelUpload}
+            onGenerateModel={handleGenerateModel}
             itemsToWearNames={wardrobe.filter(i => selectedItemIds.includes(i.id)).map(i => i.name)}
             onManualRender={handleRenderLook}
             hasPendingChanges={hasPendingChanges()}
@@ -374,6 +432,21 @@ const App: React.FC = () => {
             onClose={() => setShowSuggestions(false)} 
           />
       )}
+      
+      <ApiKeyModal 
+        isOpen={showApiKeyModal} 
+        onClose={() => setShowApiKeyModal(false)}
+        onSave={handleSaveApiKey}
+        initialKey={getGeminiApiKey()}
+      />
+
+      <DataManagementModal 
+        isOpen={showDataModal}
+        onClose={() => setShowDataModal(false)}
+        wardrobe={wardrobe}
+        modelImage={modelImage}
+        onImport={handleImportData}
+      />
     </div>
   );
 };
