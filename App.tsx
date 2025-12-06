@@ -273,10 +273,10 @@ const App: React.FC = () => {
       {/* --- HEADER --- */}
       <header className="bg-white border-b-2 border-black px-4 sm:px-6 py-4 flex justify-between items-center sticky top-0 z-40 shadow-hard-sm">
         <div className="flex items-center gap-4 overflow-hidden">
-           <div className="w-8 h-8 bg-black text-white flex items-center justify-center font-serif font-bold text-xl shrink-0">D</div>
+           <div className="w-8 h-8 bg-black text-white flex items-center justify-center font-serif font-bold text-xl shrink-0">C</div>
            <div className="overflow-hidden">
-             <h1 className="font-serif text-lg sm:text-2xl font-bold tracking-tight leading-none truncate">THE DIGITAL CLOSET</h1>
-             <p className="font-mono text-[10px] tracking-widest text-stone-500 hidden sm:block">EST. 2025 // CURATE_ORGANIZE</p>
+             <h1 className="font-serif text-lg sm:text-2xl font-bold tracking-tight leading-none truncate">CAPSULE CLOSET</h1>
+             <p className="font-mono text-[10px] tracking-widest text-stone-500 hidden sm:block">EST. 2025 // CURATE & ORGANIZE</p>
            </div>
         </div>
         
